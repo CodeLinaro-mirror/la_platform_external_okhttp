@@ -29,7 +29,10 @@ final class Segment {
   // TODO: Using fixed-size segments makes pooling easier. But it harms memory
   //       efficiency and encourages copying. Try variable sized segments?
   // TODO: Is 2 KiB a good default segment size?
-  static final int SIZE = 2048;
+
+  // Increasing socket read bytes from 2KB to 8KB reduces time taken
+  // by application to read bytes
+  static final int SIZE = 8192;
 
   final byte[] data = new byte[SIZE];
 
