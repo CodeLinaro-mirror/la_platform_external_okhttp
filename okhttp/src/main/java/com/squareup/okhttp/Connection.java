@@ -224,8 +224,21 @@ public final class Connection implements Closeable {
     return connected;
   }
 
+
+  /*move AndroidHttpClientConnection.close() to here*/
   @Override public void close() throws IOException {
-    if (socket != null) socket.close();
+    if (socket != null) {
+        try {
+            try {
+                socket.shutdownOutput();
+            }  catch (IOException ignore){}
+            try {
+                socket.shutdownInput();
+            } catch (IOException ignore){}
+        } catch (UnsupportedOperationException ignore){}
+
+        socket.close();
+    }
   }
 
   /** Returns the route used by this connection. */
