@@ -52,6 +52,9 @@ import okio.Sink;
 import static com.squareup.okhttp.internal.Util.getEffectivePort;
 import static com.squareup.okhttp.internal.http.StatusLine.HTTP_TEMP_REDIRECT;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
+
 /**
  * This implementation uses HttpEngine to send requests and receive responses.
  * This class may use multiple HttpEngines to follow redirects, authentication
@@ -79,6 +82,7 @@ public class HttpURLConnectionImpl extends HttpURLConnection {
   /** Like the superclass field of the same name, but a long and available on all platforms. */
   private long fixedContentLength = -1;
   private int redirectionCount;
+  private static int attRedirectCount;
   protected IOException httpEngineFailure;
   protected HttpEngine httpEngine;
 
@@ -437,9 +441,41 @@ public class HttpURLConnectionImpl extends HttpURLConnection {
       case HTTP_MOVED_TEMP:
       case HTTP_SEE_OTHER:
       case HTTP_TEMP_REDIRECT:
+
+        String location = getHeaderField("Location");
+        if (location == null) {
+          return Retry.NONE;
+        }
+        URL previousUrl = url;
+        url = new URL(previousUrl, location);
+
+        if (getbgDataProperty().equals("false")) {
+        // Checking the redirect URL to set the data block property
+        // when zero balance is hit
+            String redirectUrl = getRedirectUrl();
+
+            if (redirectUrl != null && url.toString().contains(redirectUrl)) {
+                attRedirectCount++;
+
+                Platform.get().logW("zerobalance::okhttp:attRedirectCount="+attRedirectCount );
+                if (attRedirectCount >= 3) {
+                    Platform.get().logW("zerobalance::okhttp:Background Data will be disabled" );
+                    setbgDataProperty("true");
+                    attRedirectCount = 0;
+                }
+            } else {
+                Platform.get().logW("zerobalance::okhttp: resetting the counter ");
+                attRedirectCount = 0;
+            }
+        } else {
+            Platform.get().logW("zerobalance::okhttp:Background Data is already disabled " );
+            attRedirectCount = 0;
+        }
+
         if (!getInstanceFollowRedirects()) {
           return Retry.NONE;
         }
+
         if (++redirectionCount > MAX_REDIRECTS) {
           throw new ProtocolException("Too many redirects: " + redirectionCount);
         }
@@ -448,12 +484,7 @@ public class HttpURLConnectionImpl extends HttpURLConnection {
           // the user agent MUST NOT automatically redirect the request"
           return Retry.NONE;
         }
-        String location = getHeaderField("Location");
-        if (location == null) {
-          return Retry.NONE;
-        }
-        URL previousUrl = url;
-        url = new URL(previousUrl, location);
+
         if (!url.getProtocol().equals("https") && !url.getProtocol().equals("http")) {
           return Retry.NONE; // Don't follow redirects to unsupported protocols.
         }
@@ -473,6 +504,77 @@ public class HttpURLConnectionImpl extends HttpURLConnection {
         return Retry.NONE;
     }
   }
+
+  private String getbgDataProperty(){
+    String isDisabled = "false";
+    try {
+      Class<?> zeroBalanceHelper = Class
+	.forName("android.net.ZeroBalanceHelper");
+      Object helperObject = zeroBalanceHelper.newInstance();
+      Method bgDataProperty = zeroBalanceHelper.getMethod(
+        "getBgDataProperty", null);
+      bgDataProperty.setAccessible(true);
+      isDisabled = (String) bgDataProperty.invoke(helperObject, null);
+    } catch (ClassNotFoundException ex) {
+       ex.printStackTrace();
+    } catch (NoSuchMethodException ex) {
+       ex.printStackTrace();
+    } catch (InstantiationException ex) {
+       ex.printStackTrace();
+    } catch (IllegalAccessException ex) {
+       ex.printStackTrace();
+    } catch (InvocationTargetException ex) {
+       ex.printStackTrace();
+    }
+    return isDisabled;
+  }
+
+  private void setbgDataProperty(String value){
+    try {
+      Class<?> zeroBalanceHelper = Class
+        .forName("android.net.ZeroBalanceHelper");
+      Object helperObject = zeroBalanceHelper.newInstance();
+      Method setBgDataProperty = zeroBalanceHelper.getMethod(
+        "setBgDataProperty", String.class);
+     setBgDataProperty.setAccessible(true);
+     setBgDataProperty.invoke(helperObject, value);
+   } catch (ClassNotFoundException ex) {
+      ex.printStackTrace();
+   } catch (NoSuchMethodException ex) {
+      ex.printStackTrace();
+   } catch (InstantiationException ex) {
+      ex.printStackTrace();
+   } catch (IllegalAccessException ex) {
+      ex.printStackTrace();
+   } catch (InvocationTargetException ex) {
+      ex.printStackTrace();
+   }
+  }
+
+  private String getRedirectUrl(){
+    String redirectUrl = null;
+    try {
+      Class<?> zeroBalanceHelper = Class
+        .forName("android.net.ZeroBalanceHelper");
+      Object helperObject = zeroBalanceHelper.newInstance();
+      Method getRedirectUrl = zeroBalanceHelper.getMethod(
+        "getConfiguredRedirectURL", null);
+      getRedirectUrl.setAccessible(true);
+      redirectUrl = (String) getRedirectUrl.invoke(helperObject, null);
+     } catch (ClassNotFoundException ex) {
+        ex.printStackTrace();
+     } catch (NoSuchMethodException ex) {
+        ex.printStackTrace();
+     } catch (InstantiationException ex) {
+        ex.printStackTrace();
+     } catch (IllegalAccessException ex) {
+        ex.printStackTrace();
+     } catch (InvocationTargetException ex) {
+        ex.printStackTrace();
+     }
+    return redirectUrl;
+  }
+
 
   /**
    * Returns true if either:
