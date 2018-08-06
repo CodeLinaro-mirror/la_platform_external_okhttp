@@ -55,7 +55,6 @@ public final class ConnectionPool {
   private static final long DEFAULT_KEEP_ALIVE_DURATION_MS = 5 * 60 * 1000; // 5 min
 
   private static final ConnectionPool systemDefault;
-  private TcmIdleTimerMonitor mIdleMonitor;
 
   static {
     String keepAlive = System.getProperty("http.keepAlive");
@@ -102,7 +101,6 @@ public final class ConnectionPool {
   public ConnectionPool(int maxIdleConnections, long keepAliveDurationMs) {
     this.maxIdleConnections = maxIdleConnections;
     this.keepAliveDurationNs = keepAliveDurationMs * 1000 * 1000;
-    mIdleMonitor = new TcmIdleTimerMonitor(this);
   }
 
   public static ConnectionPool getDefault() {
@@ -337,16 +335,4 @@ public final class ConnectionPool {
     return new ArrayList<>(connections);
   }
 
-  /** Close all idle connections */
-  public synchronized void closeIdleConnections()
-  {
-    int oldMaxIdleConections = maxIdleConnections;
-    maxIdleConnections = 0;
-    try {
-      connectionsCleanupRunnable.run();
-    } catch (Exception err) {
-      Platform.get().logW("Unable to closeIdleConnections(): " + err);
-    }
-    maxIdleConnections = oldMaxIdleConections;
-  }
 }
